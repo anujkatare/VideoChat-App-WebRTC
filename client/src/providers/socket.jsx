@@ -9,7 +9,7 @@ export const useSocket = () => {
 
 const SocketProvider = ({ children }) => {
   const socket = useMemo(
-    () => io("http://localhost:8001"),
+    () => io("https://videochat-app-webrtc-server.onrender.com"),
     []
   )
 
@@ -21,3 +21,4 @@ const SocketProvider = ({ children }) => {
 }
 
 export default SocketProvider
+
