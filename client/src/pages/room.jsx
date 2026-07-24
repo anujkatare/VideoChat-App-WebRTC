@@ -295,6 +295,23 @@ const Room = () => {
     console.log('Call accepted')
   }, [setRemoteAns])
 
+  const handleIncomingIceCandidate = useCallback(async ({ candidate }) => {
+    if (!candidate) return
+    try {
+      await peer.addIceCandidate(new RTCIceCandidate(candidate))
+    } catch (error) {
+      console.error('Error adding remote ICE candidate:', error)
+    }
+  }, [peer])
+
+  const handleIceCandidate = useCallback((event) => {
+    if (!event.candidate || !remoteEmailId || !socket) return
+    socket.emit('ice-candidate', {
+      emailId: remoteEmailId,
+      candidate: event.candidate
+    })
+  }, [remoteEmailId, socket])
+
   // Emoji reaction triggers
   const handleIncomingReaction = useCallback(({ reactionType }) => {
     const newReaction = {
@@ -363,6 +380,7 @@ const Room = () => {
     socket.on('user-joined', handleNewUserJoined)
     socket.on('incoming-call', handleIncomingCall)
     socket.on('call-accepted', handleCallAccepted)
+    socket.on('ice-candidate', handleIncomingIceCandidate)
     socket.on('message', handleIncomingMessage)
     socket.on('reaction', handleIncomingReaction)
     socket.on('draw-line', handleRemoteDraw)
@@ -386,6 +404,7 @@ const Room = () => {
       socket.off('user-joined')
       socket.off('incoming-call')
       socket.off('call-accepted')
+      socket.off('ice-candidate')
       socket.off('message')
       socket.off('reaction')
       socket.off('draw-line')
@@ -394,15 +413,18 @@ const Room = () => {
       socket.off('screen-share-stop')
       socket.off('host-left')
     }
-  }, [socket, handleNewUserJoined, handleIncomingCall, handleCallAccepted, handleIncomingMessage, handleIncomingReaction, handleRemoteDraw, handleRemoteClear, getUserMediaStream])
+  }, [socket, handleNewUserJoined, handleIncomingCall, handleCallAccepted, handleIncomingIceCandidate, handleIncomingMessage, handleIncomingReaction, handleRemoteDraw, handleRemoteClear, getUserMediaStream])
 
-  // WebRTC negotiation listeners
+  // WebRTC ICE candidate flow
   useEffect(() => {
+    peer.addEventListener('icecandidate', handleIceCandidate)
     peer.addEventListener('negotiationneeded', handleNegotiation)
+
     return () => {
+      peer.removeEventListener('icecandidate', handleIceCandidate)
       peer.removeEventListener('negotiationneeded', handleNegotiation)
     }
-  }, [peer, handleNegotiation])
+  }, [peer, handleIceCandidate, handleNegotiation])
 
   // Mute Audio
   const toggleMic = () => {

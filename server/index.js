@@ -115,45 +115,30 @@ io.on('connection', (socket) => {
       console.log(`User ${emailId} assigned as Host for room ${roomId}`)
       socket.emit('joined-room', { roomId, isHost: true })
     } else {
-      // Host is active. User is placed in Waiting Room. Emit join-request to the Host
-      console.log(`Host active for room ${roomId}. Sending join-request to Host socket ${hostSocketId}`)
-      io.to(hostSocketId).emit('join-request', {
-        emailId,
-        guestSocketId: socket.id
-      })
-      
-      // Notify the guest that they are in the waiting room
-      socket.emit('waiting-room', { roomId })
-    }
-  })
-
-  // Host response to Guest join request
-  socket.on('approve-join', ({ roomId, guestSocketId, approved, emailId }) => {
-    console.log(`Host response: approved=${approved} for guest=${guestSocketId} in room ${roomId}`)
-    
-    if (approved) {
-      const guestSocket = io.sockets.sockets.get(guestSocketId)
-      if (guestSocket) {
-        guestSocket.join(roomId)
-        
-        // Add to participants list
-        const participants = roomParticipants.get(roomId) || []
-        if (!participants.includes(emailId)) {
-          participants.push(emailId)
-          roomParticipants.set(roomId, participants)
-        }
-
-        guestSocket.emit('joined-room', { roomId, isHost: false })
-        
-        // Broadcast user joined to other sockets in room (primarily the host)
-        socket.broadcast.to(roomId).emit('user-joined', { emailId })
+      // Host is active. Automatically admit the guest and let the host start the call.
+      socket.join(roomId)
+      const participants = roomParticipants.get(roomId) || []
+      if (!participants.includes(emailId)) {
+        participants.push(emailId)
+        roomParticipants.set(roomId, participants)
       }
-    } else {
-      io.to(guestSocketId).emit('join-declined', { roomId })
+
+      socket.emit('joined-room', { roomId, isHost: false })
+      socket.broadcast.to(roomId).emit('user-joined', { emailId })
     }
   })
 
   // WebRTC Signalling Events
+  socket.on('ice-candidate', ({ emailId, candidate }) => {
+    const targetSocketId = emailToSocketMap.get(emailId)
+    if (!targetSocketId || !candidate) return
+
+    socket.to(targetSocketId).emit('ice-candidate', {
+      candidate,
+      from: socketToEmailMap.get(socket.id)
+    })
+  })
+
   socket.on('call-user', ({ emailId, offer }) => {
     const fromEmail = socketToEmailMap.get(socket.id)
     const targetSocketId = emailToSocketMap.get(emailId)
