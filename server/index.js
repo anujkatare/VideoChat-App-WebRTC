@@ -96,6 +96,7 @@ io.on('connection', (socket) => {
       socket.emit('joined-room', {
         roomId,
         isHost: roomHosts.get(roomId) === socket.id,
+        participantsCount: participants.length
       })
       return
     }
@@ -106,25 +107,23 @@ io.on('connection', (socket) => {
       roomHosts.set(roomId, socket.id)
       socket.join(roomId)
       
-      const participants = roomParticipants.get(roomId) || []
       if (!participants.includes(emailId)) {
         participants.push(emailId)
         roomParticipants.set(roomId, participants)
       }
 
       console.log(`User ${emailId} assigned as Host for room ${roomId}`)
-      socket.emit('joined-room', { roomId, isHost: true })
+      socket.emit('joined-room', { roomId, isHost: true, participantsCount: participants.length })
     } else {
       // Host is active. Automatically admit the guest and let the host start the call.
       socket.join(roomId)
-      const participants = roomParticipants.get(roomId) || []
       if (!participants.includes(emailId)) {
         participants.push(emailId)
         roomParticipants.set(roomId, participants)
       }
 
-      socket.emit('joined-room', { roomId, isHost: false })
-      socket.broadcast.to(roomId).emit('user-joined', { emailId })
+      socket.emit('joined-room', { roomId, isHost: false, participantsCount: participants.length })
+      socket.broadcast.to(roomId).emit('user-joined', { emailId, participantsCount: participants.length })
     }
   })
 
@@ -197,6 +196,10 @@ io.on('connection', (socket) => {
   // Floating Emoji Reaction burst events
   socket.on('reaction', ({ roomId, reactionType }) => {
     socket.to(roomId).emit('reaction', { reactionType })
+  })
+
+  socket.on('raise-hand', ({ roomId, sender }) => {
+    socket.to(roomId).emit('raise-hand', { sender })
   })
 
   socket.on('disconnect', () => {

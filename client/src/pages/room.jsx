@@ -98,7 +98,7 @@ const Room = () => {
 
   // Fetch local media devices stream
   const getUserMediaStream = useCallback(async () => {
-    if (streamStartedRef.current) return
+    if (streamStartedRef.current) return null
     streamStartedRef.current = true
 
     try {
@@ -123,9 +123,12 @@ const Room = () => {
       stream.getTracks().forEach(track => {
         peer.addTrack(track, stream)
       })
+
+      return stream
     } catch (err) {
       streamStartedRef.current = false
       console.error('Error accessing media devices. Please check camera/mic permissions:', err)
+      return null
     }
   }, [peer])
 
@@ -274,20 +277,22 @@ const Room = () => {
   }, [user, translationLanguage])
 
   // New peer joins
-  const handleNewUserJoined = useCallback(async ({ emailId }) => {
+  const handleNewUserJoined = useCallback(async ({ emailId, participantsCount: count }) => {
+    await getUserMediaStream()
     setRemoteEmailId(emailId)
-    setParticipantsCount(2)
+    setParticipantsCount(count || 2)
     const offer = await createOffer()
     socket.emit('call-user', { emailId, offer })
-  }, [createOffer, socket])
+  }, [createOffer, getUserMediaStream, socket])
 
   // Incoming offer
   const handleIncomingCall = useCallback(async ({ from, offer }) => {
+    await getUserMediaStream()
     setRemoteEmailId(from)
     setParticipantsCount(2)
     const ans = await createAnswer(offer)
     socket.emit('call-accepted', { emailId: from, ans })
-  }, [createAnswer, socket])
+  }, [createAnswer, getUserMediaStream, socket])
 
   // Answer accepted
   const handleCallAccepted = useCallback(async ({ ans }) => {
@@ -373,7 +378,10 @@ const Room = () => {
   useEffect(() => {
     if (!socket) return
 
-    socket.on('joined-room', () => {
+    socket.on('joined-room', ({ participantsCount }) => {
+      if (typeof participantsCount === 'number') {
+        setParticipantsCount(participantsCount)
+      }
       getUserMediaStream()
     })
 
@@ -394,6 +402,8 @@ const Room = () => {
       setRemoteScreenSharing(false)
     })
 
+    socket.on('raise-hand', handleHandRaisedNotification)
+
     socket.on('host-left', () => {
       alert('The Host has left the room. Disconnecting.')
       leaveRoom()
@@ -411,6 +421,7 @@ const Room = () => {
       socket.off('clear-canvas')
       socket.off('screen-share-start')
       socket.off('screen-share-stop')
+      socket.off('raise-hand')
       socket.off('host-left')
     }
   }, [socket, handleNewUserJoined, handleIncomingCall, handleCallAccepted, handleIncomingIceCandidate, handleIncomingMessage, handleIncomingReaction, handleRemoteDraw, handleRemoteClear, getUserMediaStream])
@@ -607,6 +618,7 @@ const Room = () => {
         sender: user.name,
         text: `✋ Raised Hand`
       })
+      socket.emit('raise-hand', { roomId, sender: user.name })
       handleHandRaisedNotification({ sender: user.name })
     }
   }
@@ -785,10 +797,10 @@ const Room = () => {
       </header>
 
       {/* Main Workspace Area */}
-      <main style={{ display: 'grid', gridTemplateColumns: sidebarOpen ? '1fr 380px' : '1fr 0px', overflow: 'hidden', transition: 'grid-template-columns 0.25s ease' }}>
+      <main style={{ display: 'grid', gridTemplateColumns: sidebarOpen ? '1fr 380px' : '1fr 0px', overflow: 'hidden', transition: 'grid-template-columns 0.25s ease', height: 'calc(100vh - 144px)' }}>
 
         {/* Video stream center panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', padding: '24px', gap: '20px', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '24px', gap: '20px', justifyContent: 'center', alignItems: 'center', position: 'relative', height: '100%', minHeight: 0 }}>
 
           {/* VIDEO GRID */}
           <div style={{
@@ -798,16 +810,19 @@ const Room = () => {
             flex: 1,
             display: 'flex',
             gap: (screenSharing || remoteScreenSharing) ? '0' : '24px',
-            justify: 'center',
+            justifyContent: 'center',
             alignItems: 'center',
-            transition: 'all 0.35s ease'
+            transition: 'all 0.35s ease',
+            minHeight: 0,
           }}>
 
             {/* MAIN / LARGE VIDEO */}
             <div style={{
               position: 'relative',
               width: (screenSharing || remoteScreenSharing) ? '100%' : '50%',
-              maxWidth: (screenSharing || remoteScreenSharing) ? '100%' : '480px',
+              maxWidth: (screenSharing || remoteScreenSharing) ? '900px' : '480px',
+              maxHeight: (screenSharing || remoteScreenSharing) ? 'calc(100vh - 260px)' : 'auto',
+              height: (screenSharing || remoteScreenSharing) ? '100%' : 'auto',
               aspectRatio: (screenSharing || remoteScreenSharing) ? '16/9' : '4/3',
               borderRadius: 'var(--rounded-xl)',
               border: screenSharing ? '2px solid var(--color-success)' : remoteScreenSharing ? '2px solid var(--color-primary)' : '1px solid #332a26',
