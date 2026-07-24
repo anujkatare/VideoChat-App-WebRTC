@@ -10,10 +10,13 @@ export const useSocket = () => {
 const SocketProvider = ({ children }) => {
   const socketUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:5000'
-    : 'https://videochat-app-webrtc-server.onrender.com'
+    : 'https://aurachat-backend-99fa.onrender.com' //Updated to new live Render URL
 
   const socket = useMemo(
-    () => io(socketUrl),
+    () => io(socketUrl, {
+      transports: ['websocket', 'polling'], // Added for stable fallback
+      withCredentials: true
+    }),
     [socketUrl]
   )
 
@@ -25,4 +28,3 @@ const SocketProvider = ({ children }) => {
 }
 
 export default SocketProvider
-
